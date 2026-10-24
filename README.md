@@ -34,3 +34,22 @@ field of view is vertical.
 - The scenes are rendered with bicubic sampling, a sharper mip bias and a light unsharp mask (`?sharpen=N`, 0 turns it off),
   because the 2002 JPEG sources are soft and are shown at 0.7–1.0× of source pixels (more on high-DPI screens).
 - Next hour's panoramas are preloaded from :59:30, and phrases have a small text shadow for legibility.
+
+## Fonts
+
+In the QuickTime movie all text is **Monaco, bold, 22 pt**, anti-aliased and keyed (transparent background), in white with the
+time-telling letters in red. This applies to both the 12 letter cells of the `clockface` dial (40×40 px each) and the phrase files
+in `hnds/` (`{font:Monaco}{bold}{size:22}`). The PC variants (`hndspc/`) used Courier 24 and are not used here.
+Monaco is Apple's font and cannot be redistributed, so the font stack in `nbks/index.html` (`#stage`) is:
+
+```
+Monaco, "Spline Sans Mono Variable", "Spline Sans Mono", ui-monospace, Menlo, monospace
+```
+
+- On macOS (and iOS) the piece is set in Monaco, as in the original.
+- Elsewhere it is set in **Spline Sans Mono** (bold), bundled from the `@fontsource-variable/spline-sans-mono` npm package
+  (imported in `nbks/custom.tmpl`). The font files are copied into `dist/assets/`, so the built piece needs no network access for fonts.
+  Note that fontsource registers the family as `Spline Sans Mono Variable`, so that exact name must be in the stack.
+- Inter and Source Serif 4 are also bundled via `custom.tmpl`, but only for the notebook's own page chrome, not the clock.
+- The dial letters and phrase columns are positioned in px and `ch` units, so a different monospace face changes the
+  look slightly (character width, weight) but not the layout.

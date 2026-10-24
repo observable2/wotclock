@@ -6,7 +6,7 @@
       /* the stage is the 780x530 window of the original QuickTime movie, scaled to fit */
       #wotclock { position: relative; margin: 0 auto; overflow: hidden; background: #000; }
       #stage { position: absolute; left: 0; top: 0; width: 780px; height: 530px; transform-origin: 0 0; background: #000;
-        font-family: Monaco, "Spline Sans Mono", ui-monospace, Menlo, monospace; font-weight: bold; font-size: 22px; color: #fff; }
+        font-family: Monaco, "Spline Sans Mono Variable", "Spline Sans Mono", ui-monospace, Menlo, monospace; font-weight: bold; font-size: 22px; color: #fff; }
       #stage .view { position: absolute; overflow: hidden; touch-action: none; cursor: grab; }
       #stage .view.dragging { cursor: grabbing; }
       #stage canvas { display: block; width: 100%; height: 100%; }
@@ -128,6 +128,20 @@
     window.addEventListener("resize", fit);
     fit();
 
+    // Text is centred by its ink, not its advance box: glyph side bearings differ ("ET" is a little right-heavy,
+    // "r" and "’" have large bearings), which would otherwise leave the dial letters and the gap between the two
+    // words of a phrase visibly off the centre line.
+    const fontFamily = getComputedStyle(document.getElementById("stage")).fontFamily;
+    await document.fonts.load(`bold 22px ${fontFamily}`);
+    const ctx = document.createElement("canvas").getContext("2d");
+    ctx.font = `bold 22px ${fontFamily}`;
+    const ink = (s) => {
+      const t = ctx.measureText(s);
+      return { left: -t.actualBoundingBoxLeft, right: t.width - t.actualBoundingBoxRight, centre: (t.actualBoundingBoxRight - t.actualBoundingBoxLeft) / 2 - t.width / 2 };
+    };
+    // a phrase word without its {red} markers
+    const plain = (w) => w.replace(/[{}]/g, "");
+
     // the letter dial and the phrase
     const ring = document.getElementById("ring");
     const cells = DIAL.cells.map((c) => {
@@ -135,7 +149,7 @@
       d.textContent = c.text;
       // the letters sit on a true circle (the original's cell positions are only roughly circular)
       const a = (c.at * Math.PI) / 6;
-      d.style.left = `${DIAL.cx + DIAL.r * Math.sin(a) - DIAL.cell / 2}px`;
+      d.style.left = `${DIAL.cx + DIAL.r * Math.sin(a) - DIAL.cell / 2 - ink(c.text).centre}px`;
       d.style.top = `${DIAL.cy - DIAL.r * Math.cos(a) - DIAL.cell / 2}px`;
       return d;
     });
@@ -201,9 +215,11 @@
             .map((l) => {
               // the space between the two words sits on the centre line: first word ranged right, second ranged left
               const i = l.indexOf(" ");
-              return i < 0
-                ? `<div class="l one">${redToHTML(l)}</div>`
-                : `<div class="l"><span>${redToHTML(l.slice(0, i))}</span><span>${redToHTML(l.slice(i + 1))}</span></div>`;
+              if (i < 0) return `<div class="l one" style="translate: ${-ink(plain(l)).centre}px">${redToHTML(l)}</div>`;
+              // the middle of the gap between the last ink of the first word and the first ink of the second goes on the centre line
+              const a = plain(l.slice(0, i)), b = plain(l.slice(i + 1));
+              const shift = -(ink(b[0]).left - ink(a[a.length - 1]).right) / 2;
+              return `<div class="l" style="translate: ${shift}px"><span>${redToHTML(l.slice(0, i))}</span><span>${redToHTML(l.slice(i + 1))}</span></div>`;
             })
             .join("");
         },
