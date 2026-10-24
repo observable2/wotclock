@@ -9,3 +9,5 @@ CLAUDE.md
 dist/
 node_modules/
 raw/
+workingnotes.md
+__pycache__/
