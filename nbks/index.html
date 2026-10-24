@@ -16,7 +16,11 @@
       #stage #ring, #stage #hands { position: absolute; pointer-events: none; z-index: 200; }
       #stage #ring { left: 190px; top: 124px; width: 480px; height: 400px; }
       #stage #ring div { position: absolute; width: 40px; height: 40px; line-height: 40px; text-align: center; text-shadow: 0 0 3px #000; }
-      #stage #hands { left: 215px; top: 272px; width: 430px; height: 96px; display: flex; flex-direction: column; justify-content: center; text-align: center; line-height: 1.5; white-space: pre; text-shadow: 0 0 3px #000, 0 0 6px #000; }
+      #stage #hands { left: 150px; top: 272px; width: 480px; height: 96px; display: flex; flex-direction: column; justify-content: center; line-height: 1.5; white-space: pre; text-shadow: 0 0 3px #000, 0 0 6px #000; }
+      #stage #hands .l { display: grid; grid-template-columns: 1fr 1fr; }
+      #stage #hands .l > :first-child { text-align: right; padding-right: 0.5ch; }
+      #stage #hands .l > :last-child { text-align: left; padding-left: 0.5ch; }
+      #stage #hands .l.one { display: block; text-align: center; }
       #stage .red { color: #f00; }
     </style>
     <div id="wotclock">
@@ -129,8 +133,10 @@
     const cells = DIAL.cells.map((c) => {
       const d = ring.appendChild(document.createElement("div"));
       d.textContent = c.text;
-      d.style.left = `${c.x}px`;
-      d.style.top = `${c.y}px`;
+      // the letters sit on a true circle (the original's cell positions are only roughly circular)
+      const a = (c.at * Math.PI) / 6;
+      d.style.left = `${DIAL.cx + DIAL.r * Math.sin(a) - DIAL.cell / 2}px`;
+      d.style.top = `${DIAL.cy - DIAL.r * Math.cos(a) - DIAL.cell / 2}px`;
       return d;
     });
     const handsEl = document.getElementById("hands");
@@ -191,7 +197,15 @@
           const key = `${h}:${handsEntry(m, s)}`;
           if (key === lastHands) return;
           lastHands = key;
-          handsEl.innerHTML = hands[handsFile(h)][handsEntry(m, s)].map((l) => `<div>${redToHTML(l)}</div>`).join("");
+          handsEl.innerHTML = hands[handsFile(h)][handsEntry(m, s)]
+            .map((l) => {
+              // the space between the two words sits on the centre line: first word ranged right, second ranged left
+              const i = l.indexOf(" ");
+              return i < 0
+                ? `<div class="l one">${redToHTML(l)}</div>`
+                : `<div class="l"><span>${redToHTML(l.slice(0, i))}</span><span>${redToHTML(l.slice(i + 1))}</span></div>`;
+            })
+            .join("");
         },
       },
     });

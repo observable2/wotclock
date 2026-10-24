@@ -23,6 +23,7 @@ export function analogPan(hour, minute) {
 // e=1 t=2 a=3 n=4 i=5 o=6 s=7 l=8 r=9; one cell per hand position, clockwise from 12.
 export const DIAL = {
   x: 190, y: 124, w: 480, h: 400, cell: 40,
+  cx: 200, cy: 200, r: 182, // centre and radius (within the track) of the circle the letters are set on
   cells: [
     { at: 12, x: 184, y: 0, text: "ET" },
     { at: 1, x: 284, y: 29, text: "E" },
@@ -44,7 +45,7 @@ export const dialIndex = (second) => Math.floor(second / 5) % 12;
 
 // The 'clockhands' text track (hnds/cHHhands.txt, one file per hour, hour 0 uses c24) holds a phrase for every 4 s of
 // the hour, selected by minute*60+second. Red letters are wrapped in {} in hands.json.
-export const HANDS = { x: 215, y: 272, w: 430, h: 96 };
+export const HANDS = { x: 150, y: 272, w: 480, h: 96 }; // centred on the dial (x 390)
 export const handsFile = (hour) => (hour === 0 ? 24 : hour) - 1; // index into hands.json
 export const handsEntry = (minute, second) => Math.floor((minute * 60 + second) / 4);
 
