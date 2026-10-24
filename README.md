@@ -1,6 +1,6 @@
 # wotclock
 
-An Observable Notebook Kit recreation of *wotclock* (2002/2005), a QuickTime 'speaking clock' made in LiveStage.
+An Observable Notebook Kit recreation of *wotclock* (2002/2005), a QuickTime 'speaking clock' made in LiveStage. Co-implemented with Claude Sonnet 5.5.
 The notebook entry point is `nbks/index.html`.
 
 ## Commands
