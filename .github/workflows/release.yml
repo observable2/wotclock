@@ -22,5 +22,5 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
-            --title "DxD Jukebox ${GITHUB_REF_NAME#v}" \
+            --title "$GITHUB_REPOSITORY ${GITHUB_REF_NAME#v}" \
             --generate-notes
