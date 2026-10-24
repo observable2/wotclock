@@ -1,0 +1,260 @@
+<!doctype html>
+<notebook theme="stark">
+  <title>DxDJ Titles</title>
+  
+  <script id="1" type="module">
+    import {repo} from "./config.js";
+    import {watchCurrent, formatDuration, screenRefFromURL, screenQuery, markdownFragment, FIELDS, stepRotation, currentInfo} from "./lib.js";
+    import {marked} from "npm:marked@15.0.12";
+
+    const screenLink = page.querySelector("#screen-link");
+    const heading = page.querySelector("#heading");
+    const siteTitle = page.querySelector("#site-title");
+    const fields = page.querySelector("#fields");
+    const message = page.querySelector("#message");
+
+    // ?s=2 or ?s=lobby picks the screen (none = the lowest-numbered); the Screen link goes to the same one (no ?s= for screen 1)
+    const screenRef = screenRefFromURL();
+
+    const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    // yearCreated shows as "14 March 2024" when monthDayCreated (stored as "M/D") is set, "March 2024" when it is just a month
+    // ("M"), otherwise just the year
+    function createdText(item) {
+      if (!item.monthDayCreated) return item.yearCreated;
+      const [month, day] = item.monthDayCreated.split("/").map(Number);
+      return `${day ? day + " " : ""}${MONTHS[month - 1]} ${item.yearCreated}`;
+    }
+
+    // duration reads according to durationType. item.duration is already the first slot's length when none was entered
+    // (see load() in repo.js), so "work" needs no extra fallback here. A loop with no duration at all shows nothing.
+    function durationText(item) {
+      const d = item.duration;
+      switch (item.durationType) {
+        case "ambient": return "Ambient";
+        case "loop": return d ? "Loops over " + d : "";
+        case "ambient loop": return d ? "Ambient, looping over " + d : "";
+        default: return d;
+      }
+    }
+
+    function showItem(item) {
+      message.style.display = "none";
+      heading.style.display = "";
+      heading.style.fontStyle = "italic";
+      fields.style.display = "grid";
+      heading.textContent = item.title;
+      // Cell 2 decides which fields appear: a field is shown only if the markup has a
+      // <dd id="{key}Value"> for it (and optionally a <dt id="{key}"> holding its label).
+      // The loop only injects values; it never creates dt/dd elements.
+      for (const f of FIELDS) {
+        const dd = fields.querySelector(`#${f.key}Value`);
+        if (!dd) continue;
+        const dt = fields.querySelector(`#${f.key}`);
+        const value = f.key === "title" || (f.key === "url" && item.hideURL) ? "" : f.key === "yearCreated" ? createdText(item) : f.key === "duration" ? durationText(item) : item[f.key];
+        const show = value ? "" : "none";
+        dd.style.display = show;
+        if (dt) dt.style.display = show;
+        if (!value) continue;
+        if (f.key === "mentor" && dt) dt.textContent = /,|&|\band\b/i.test(value) ? "advisors" : "advisor";
+        if (f.key === "url" || f.key === "furtherInfoURL") {
+          const a = document.createElement("a");
+          a.href = value;
+          a.target = "_blank";
+          a.rel = "noopener";
+          a.textContent = value;
+          dd.replaceChildren(a);
+        } else if (f.type === "markdown") {
+          dd.replaceChildren(markdownFragment(marked, value));
+        } else {
+          dd.textContent = value;
+        }
+      }
+    }
+    function showMessage(text, isError) {
+      heading.style.display = "none";
+      fields.style.display = "none";
+      message.style.color = isError ? "crimson" : "#666";
+      message.textContent = text;
+      message.style.display = "flex";
+    }
+
+    // The Screen link (lower right) says how long the current item has been showing, out of its slot's length. The poll
+    // supplies the slot's end and length; a one-second timer does the counting up in between polls.
+    let timing = null;
+    function drawScreenLink() {
+      if (!timing) { screenLink.textContent = "Screen"; return; }
+      if (timing.pinned) { screenLink.textContent = "On screen until further notice"; return; }
+      // elapsed = length - time left, kept between 0 and the slot's length
+      const elapsed = Math.min(timing.length, Math.max(0, timing.length - Math.round((timing.endsAt - Date.now()) / 1000)));
+      screenLink.textContent = `On screen for ${formatDuration(elapsed)} of ${formatDuration(timing.length)}`;
+    }
+    setInterval(drawScreenLink, 1000);
+
+    // Screen 2 ("studio") only: ← / → step through the rotation (a Show now for the previous / next item, as the Admin page's
+    // Previous / Next do) and "schedule" (or Esc) returns to the schedule. No sign-in: repo.studioPin calls a database function
+    // that only pins an item of screen 2's generated rotation (see schema.sql), so any visitor can use these controls.
+    let steppable = false;
+    const stepMessage = page.querySelector("#step-message");
+    async function control(dir) {   // dir: -1 previous, 1 next, 0 back to the schedule
+      try {
+        stepMessage.textContent = "";
+        let id = null;
+        if (dir) {
+          id = stepRotation(await repo.load(screenRef), dir);
+          if (!id) { stepMessage.textContent = "No generated rotation to step through"; return; }
+        }
+        await repo.studioPin(id);
+        // show the result now rather than at the next poll
+        const info = currentInfo(await repo.load(screenRef));
+        timing = info.item ? info : null;   // the corner link: "until further notice" when pinned, time on screen when back on the schedule
+        if (info.item) showItem(info.item); else showMessage("Nothing is scheduled at this time.", false);
+        drawScreenLink();
+      } catch (e) { stepMessage.textContent = e.message; }
+    }
+    page.querySelector("#step-prev").onclick = () => control(-1);
+    page.querySelector("#step-next").onclick = () => control(1);
+    page.querySelector("#step-reset").onclick = () => control(0);
+    document.addEventListener("keydown", (e) => {
+      if (!steppable || e.altKey || e.ctrlKey || e.metaKey || e.target.closest("input, textarea, select")) return;
+      const dir = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : e.key === "Escape" ? 0 : null;
+      if (dir === null) return;
+      e.preventDefault();
+      control(dir);
+    });
+
+    watchCurrent(repo,
+      (item) => (item ? showItem(item) : showMessage("Nothing is scheduled at this time.", false)),
+      (error) => { timing = null; drawScreenLink(); showMessage(error, true); },
+      undefined,
+      (info) => {
+        timing = info.item ? info : null; drawScreenLink();
+        steppable = info.screen.number === 2 || info.screen.slug === "studio";
+        page.querySelector("#step-controls").style.display = steppable ? "" : "none";
+        // screen 4 (slug "gallery") is the Distributed Gallery: its h3 says so, whether or not something is showing
+        if (info.screen.number === 4 || info.screen.slug === "gallery") siteTitle.textContent = "The Distributed Gallery";
+        screenLink.href = "https://dxdj.programmatology.com/screen" + screenQuery(info.screen);
+      },
+      screenRef);
+  </script>
+
+  <script id="2" type="text/html" output="page">
+    <style>
+      #titles dt {
+        text-align: right;
+        font-style: italic;
+        line-height: 1;   /* deliberately tighter than dd */
+        font-variant: small-caps;
+        color: #888;
+      }
+      #titles dd {
+        margin: 0;
+        line-height: 1.25;   /* tighter than the page default of 1.5 */
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;   /* long URLs and other unbroken text wrap instead of forcing horizontal scroll */
+      }
+      /* Markdown fields (notes, date related notes, credits), rendered as real elements, so they wrap normally instead of pre-wrap */
+      #titles dd.md { white-space: normal; }
+      dd.md p, dd.md ul, dd.md ol, dd.md blockquote, dd.md pre, dd.md h1, dd.md h2, dd.md h3, dd.md h4 {
+        margin: 0 0 0.6em;   /* bottom only: custom.tmpl forces margin-top:0 !important on everything */
+      }
+      dd.md > :last-child { margin-bottom: 0; }
+      dd.md ul, dd.md ol { padding-left: 1.4em; }
+      dd.md h1, dd.md h2, dd.md h3, dd.md h4 { font-size: 1em; }
+      dd.md blockquote { padding-left: 0.8em; border-left: 3px solid #ccc; color: #666; }
+      dd.md pre, dd.md code { font-family: var(--monospace); font-size: 0.85em; }
+      dd.md pre { overflow-x: auto; white-space: pre; }
+      /* dimmer values (links included), except the primary fields: authorship, yearCreated, notes (title is the heading) */
+      #titles dd:not(#authorshipValue, #yearCreatedValue, #notesValue) {
+        color: #888;
+      }
+      #titles dd:not(#authorshipValue, #yearCreatedValue, #notesValue) a {
+        color: #b39b2e;   /* dim yellow (a muted gold, so it stays legible on a light background) */
+      }
+      #titles {
+        /* rem, not em, so the heading (a different font size) lines up with the dd column */
+        --label-col: 9rem;   /* a bit wider than the longest one-line label, "Composition media" */
+        --label-gap: 16px;
+        padding: 5vw;
+        max-width: 720px;
+      }
+      #fields {
+        display: none;
+        /* fixed label column: a bit wider than the longest wrapped label ("and Thanks" in #credits) */
+        grid-template-columns: var(--label-col) minmax(0, 1fr);
+        gap: 6px var(--label-gap);
+      }
+      #heading {
+        margin-left: calc(var(--label-col) + var(--label-gap));   /* left edge of the dd column */
+        font-family: var(--serif);   /* Source Serif 4, loaded in custom.tmpl */
+        font-weight: 500;
+        text-transform: uppercase;   /* display only; the stored title is unchanged */
+        letter-spacing: 0;   /* a little air between the letters: try e.g. 0.05em */
+      }
+      #message {
+        display: none;
+        width: 100%;
+        height: 90vh;
+        height: 90dvh;   /* visible height on mobile browsers with a collapsing address bar; vh above is the fallback */
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+      }
+      #site-link {
+        position: fixed;   /* fixed, not absolute: stays in the viewport corner even when the page scrolls */
+        right: 1em;
+        bottom: 0.75em;
+        font-family: var(--serif);   /* Source Serif 4, loaded in custom.tmpl */
+        font-size: 0.7em;
+      }
+      #site-link a {
+        color: #888;   /* quiet but legible; same gray as the labels above */
+      }
+      /* narrow screens: no room for a side label column, so each label sits above its value */
+      @media (max-width: 480px) {
+        #titles {
+          --label-col: 0px;
+          --label-gap: 0px;
+        }
+        #fields {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 0;
+        }
+        #titles dt {
+          text-align: left;
+          padding-top: 0.75em;   /* padding, not margin: custom.tmpl forces margin-top:0 !important on everything */
+        }
+        #titles dt:empty {
+          display: none;
+        }
+      }
+    </style>
+
+    <div id="titles">
+      <h3 id="site-title" style="color: #666;margin-bottom: 2em;">DxD Jukebox &nbsp;•&nbsp; What’s Showing</h3>
+      <h2 id="heading" style="margin-bottom: 2em;"></h2>
+      <dl id="fields">
+        <dt id="authorship"></dt><dd id="authorshipValue"></dd>
+        <dt id="yearCreated"></dt><dd id="yearCreatedValue"></dd>
+        <dt id="dateRelatedNotes"></dt><dd id="dateRelatedNotesValue" class="md"></dd>
+        <dt id="media">composition media</dt><dd id="mediaValue"></dd>
+        <dt id="url"></dt><dd id="urlValue"></dd>
+        <dt id="notes"></dt><dd id="notesValue" class="md"></dd>
+        <dt id="credits">references<br>&amp; thanks</dt><dd id="creditsValue" class="md"></dd>
+        <dt id="duration">duration</dt><dd id="durationValue" style="font-family: var(--monospace); font-size: .85em;"></dd>
+        <dt id="furtherInfoURL">further information</dt><dd id="furtherInfoURLValue"></dd>
+        <dt id="license">license</dt><dd id="licenseValue"></dd>
+        <dt id="whereCreated">made in</dt><dd id="whereCreatedValue"></dd>
+        <dt id="course">course</dt><dd id="courseValue"></dd>
+        <dt id="mentor">advisors</dt><dd id="mentorValue"></dd>
+      </dl>
+      <div id="message"></div>
+    </div>
+    <div id="step-controls" style="display:none;position:fixed;left:1em;bottom:0.75em;font-size:0.9em">
+      <button id="step-prev" type="button" title="Previous in rotation (←)">&larr;</button>
+      <button id="step-next" type="button" title="Next in rotation (→)">&rarr;</button>
+      <button id="step-reset" type="button" title="Back to the schedule (Esc)">schedule</button>
+    </div>
+    <div id="step-message" style="position:fixed;left:1em;bottom:3em;font-size:0.7em;color:crimson"></div>
+    <div id="site-link"><a id="screen-link" href="https://dxdj.programmatology.com/screen">Screen</a></div>
+  </script>
+</notebook>

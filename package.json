@@ -1,0 +1,11 @@
+{
+  "name": "wotclock",
+  "private": true,
+  "dependencies": {
+    "@observablehq/notebook-kit": "^2.8.0"
+  },
+  "scripts": {
+    "preview": "notebooks preview --root nbks --template nbks/custom.tmpl",
+    "build": "notebooks build --root nbks --template nbks/custom.tmpl --out ../dist -- nbks/*.html"
+  }
+}
