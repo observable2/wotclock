@@ -2,7 +2,7 @@
   "name": "wotclock",
   "private": true,
   "dependencies": {
-    "@observablehq/notebook-kit": "^2.8.0"
+    "@observablehq/notebook-kit": "latest"
   },
   "scripts": {
     "preview": "notebooks preview --root nbks --template nbks/custom.tmpl",
